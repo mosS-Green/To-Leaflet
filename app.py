@@ -2,9 +2,10 @@
 
 import json
 import os
+from datetime import datetime
 
 import requests
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, send_from_directory
 
 app = Flask(__name__)
 
@@ -13,9 +14,7 @@ ENV_BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 ENV_CHAT_ID = os.getenv("CHAT_ID", "").strip()
 ENV_PORT = os.getenv("PORT")
 
-# The main HTML template has been heavily modified to support the new features.
-# The CSS is updated for the dark theme and new elements.
-# The JavaScript now handles drag-and-drop, collapsible sections, and asynchronous form submission.
+# The HTML, CSS, and JS have been updated for the new features.
 SINGLE_PAGE_HTML = """
 <!doctype html>
 <html lang="en">
@@ -23,6 +22,8 @@ SINGLE_PAGE_HTML = """
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Telegram File Uploader</title>
+  <!-- Link to the favicon -->
+  <link rel="icon" type="image/png" href="{{ url_for('favicon') }}">
   <style>
     :root {
       --bg-dark: #2c3531;
@@ -33,10 +34,9 @@ SINGLE_PAGE_HTML = """
       --border-color: #4a5c53;
       --success-color: #6bb06b;
       --error-color: #d9534f;
-      --info-color: #6c9f8f;
     }
     body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial;
+      font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
       background-color: var(--bg-darker);
       color: var(--text-light);
       max-width: 700px;
@@ -53,7 +53,6 @@ SINGLE_PAGE_HTML = """
       font-size: 24px;
       margin-bottom: 20px;
       text-align: center;
-      color: var(--text-light);
     }
     label {
       display: block;
@@ -61,7 +60,7 @@ SINGLE_PAGE_HTML = """
       font-weight: 600;
       font-size: 14px;
     }
-    input[type=text], textarea {
+    textarea {
       width: 100%;
       padding: 10px;
       margin-top: 6px;
@@ -70,35 +69,8 @@ SINGLE_PAGE_HTML = """
       background-color: var(--bg-darker);
       color: var(--text-light);
       box-sizing: border-box;
-    }
-    textarea { resize: vertical; }
-    /* --- Collapsible Credentials Section --- */
-    .collapsible-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      padding: 8px 0;
-      user-select: none;
-    }
-    .collapsible-header h2 {
-      font-size: 16px;
-      margin: 0;
-      font-weight: 600;
-    }
-    #toggle-arrow {
-      transition: transform 0.3s ease;
-    }
-    .collapsed #toggle-arrow {
-      transform: rotate(-90deg);
-    }
-    #credentials-content {
-      max-height: 500px; /* arbitrary large value */
-      overflow: hidden;
-      transition: max-height 0.4s ease-in-out;
-    }
-    .collapsed #credentials-content {
-      max-height: 0;
+      resize: vertical;
+      font-family: inherit;
     }
     /* --- Drag and Drop Zone --- */
     #drop-zone {
@@ -114,15 +86,31 @@ SINGLE_PAGE_HTML = """
       border-color: var(--accent-sage);
       background-color: rgba(91, 142, 125, 0.1);
     }
-    #drop-zone-text { font-weight: 600; }
     #file-name {
       margin-top: 10px;
       font-style: italic;
       color: var(--accent-sage);
     }
-    /* Hide the default file input */
     input[type=file] { display: none; }
-    /* --- Buttons and Messages --- */
+    /* --- Paste Zone --- */
+    #paste-zone {
+      border: 2px dashed transparent; /* Start transparent */
+      border-top: 1px solid var(--border-color);
+      margin-top: 20px;
+      padding: 15px;
+      text-align: center;
+      color: #aaa;
+      font-size: 14px;
+      cursor: pointer;
+      transition: border-color 0.3s, background-color 0.3s;
+      border-radius: 8px;
+    }
+    #paste-zone:focus {
+      outline: none; /* Remove default outline */
+      border-color: var(--accent-sage);
+      background-color: rgba(91, 142, 125, 0.1);
+    }
+    /* --- Buttons and Result Area --- */
     button {
       margin-top: 16px;
       padding: 12px 18px;
@@ -133,26 +121,28 @@ SINGLE_PAGE_HTML = """
       font-weight: 600;
       cursor: pointer;
       transition: background-color 0.2s;
+      font-family: inherit;
     }
     button:hover:not(:disabled) { background: var(--accent-sage-hover); }
-    button:active:not(:disabled) { transform: translateY(1px); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .hint { font-size: 13px; color: #aaa; margin-top: 6px; }
-    .env-warning { font-size: 13px; color: var(--info-color); margin-top: 6px; }
-    /* --- Result Area --- */
     #result {
       margin-top: 25px;
       padding: 15px;
       border-radius: 6px;
-      display: none; /* Hidden by default */
+      display: none;
       background: var(--bg-darker);
       border: 1px solid var(--border-color);
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #result.visible {
+      display: block;
+      opacity: 1;
     }
     #result pre {
       white-space: pre-wrap;
       word-break: break-word;
       margin: 0;
-      font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
       font-size: 14px;
     }
     #result.success { border-left: 4px solid var(--success-color); }
@@ -161,30 +151,15 @@ SINGLE_PAGE_HTML = """
 </head>
 <body>
   <div class="container">
-    <h1>Telegram File Uploader</h1>
+    <h1>Telegram Uploader</h1>
     <form id="uploadForm">
-      
-      <!-- Collapsible Credentials Section -->
-      <div id="credentials-container" class="collapsed">
-        <div class="collapsible-header" onclick="toggleCredentials()">
-          <h2>Credentials</h2>
-          <svg id="toggle-arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-        </div>
-        <div id="credentials-content">
-          <label for="token">Bot token</label>
-          <input id="token" name="token" type="text" placeholder="123456789:AAH..." value="{{ url_token|default('') }}">
-          <div id="envTokenMsg" class="env-warning" style="display:none">Default server value will be used for Bot Token.</div>
-          
-          <label for="chatid">Chat ID</label>
-          <input id="chatid" name="chatid" type="text" placeholder="-1001234567890" value="{{ url_chatid|default('') }}">
-          <div id="envChatMsg" class="env-warning" style="display:none">Default server value will be used for Chat ID.</div>
-        </div>
-      </div>
+      <!-- Credentials are now hidden fields, populated by URL params -->
+      <input id="token" name="token" type="hidden" value="{{ url_token|default('') }}">
+      <input id="chatid" name="chatid" type="hidden" value="{{ url_chatid|default('') }}">
       
       <label for="caption">Caption (optional)</label>
       <textarea id="caption" name="caption" rows="2" placeholder="Write a caption...">{{ caption|default('') }}</textarea>
       
-      <!-- Drag and Drop Zone -->
       <label>File</label>
       <div id="drop-zone">
         <span id="drop-zone-text">Drag & drop a file here, or click to select</span>
@@ -193,51 +168,44 @@ SINGLE_PAGE_HTML = """
       <input id="file-input" name="file" type="file" required>
       
       <button id="uploadBtn" type="submit" disabled>Upload</button>
+      
+      <div id="paste-zone" tabindex="0">
+        Click here, then press Ctrl+V (or Cmd+V) to paste an image
+      </div>
     </form>
     
-    <!-- API Response Area -->
     <div id="result">
       <pre id="result-text"></pre>
     </div>
   </div>
 
   <script>
-    const envToken = {{ env_token|tojson }};
-    const envChat = {{ env_chatid|tojson }};
-
     const uploadForm = document.getElementById('uploadForm');
-    const tokenInput = document.getElementById('token');
-    const chatInput = document.getElementById('chatid');
     const uploadBtn = document.getElementById('uploadBtn');
-    const envTokenMsg = document.getElementById('envTokenMsg');
-    const envChatMsg = document.getElementById('envChatMsg');
-    
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const dropZoneText = document.getElementById('drop-zone-text');
     const fileNameDisplay = document.getElementById('file-name');
-    
+    const pasteZone = document.getElementById('paste-zone');
     const resultDiv = document.getElementById('result');
     const resultText = document.getElementById('result-text');
+    let resultTimer = null;
 
     // --- State and Validation ---
-    function hasTokenValue() { return tokenInput.value && tokenInput.value.trim().length > 0; }
-    function hasChatValue() { return chatInput.value && chatInput.value.trim().length > 0; }
-
-    function updateEnvMessages() {
-      envTokenMsg.style.display = (!hasTokenValue() && envToken) ? 'block' : 'none';
-      envChatMsg.style.display = (!hasChatValue() && envChat) ? 'block' : 'none';
-    }
-
-    function updateUploadButton() {
-      const okToken = hasTokenValue() || envToken;
-      const okChat = hasChatValue() || envChat;
+    function checkReady() {
+      const token = document.getElementById('token').value.trim();
+      const chatid = document.getElementById('chatid').value.trim();
+      const envToken = {{ env_token|tojson }};
+      const envChat = {{ env_chatid|tojson }};
+      
+      const okToken = token || envToken;
+      const okChat = chatid || envChat;
       const okFile = fileInput.files.length > 0;
+      
       uploadBtn.disabled = !(okToken && okChat && okFile);
+      return okToken && okChat;
     }
     
-    tokenInput.addEventListener('input', () => { updateEnvMessages(); updateUploadButton(); });
-    chatInput.addEventListener('input', () => { updateEnvMessages(); updateUploadButton(); });
     fileInput.addEventListener('change', () => {
         if (fileInput.files.length > 0) {
             dropZoneText.textContent = 'File selected:';
@@ -246,13 +214,8 @@ SINGLE_PAGE_HTML = """
             dropZoneText.textContent = 'Drag & drop a file here, or click to select';
             fileNameDisplay.textContent = '';
         }
-        updateUploadButton();
+        checkReady();
     });
-
-    // --- Collapsible Section ---
-    function toggleCredentials() {
-      document.getElementById('credentials-container').classList.toggle('collapsed');
-    }
 
     // --- Drag and Drop Logic ---
     dropZone.addEventListener('click', () => fileInput.click());
@@ -266,67 +229,107 @@ SINGLE_PAGE_HTML = """
       dropZone.classList.remove('drag-over');
       if (e.dataTransfer.files.length) {
         fileInput.files = e.dataTransfer.files;
-        // Manually trigger the 'change' event to update UI
         fileInput.dispatchEvent(new Event('change'));
-        // Automatically submit the form on drop
-        submitForm();
+        submitForm(new FormData(uploadForm)); // Submit on drop
       }
+    });
+
+    // --- Paste Zone UX and Logic ---
+    pasteZone.addEventListener('click', () => {
+        pasteZone.focus(); // Set focus to the paste zone
+    });
+    
+    pasteZone.addEventListener('focus', () => {
+        // Optional: you could show a brief message like "Now press Ctrl+V"
+    });
+    
+    pasteZone.addEventListener('blur', () => {
+        // Optional: clear any focus-related messages
+    });
+
+    pasteZone.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+          const fileName = `pasted-image-${timestamp}.png`;
+          const imageFile = new File([blob], fileName, { type: blob.type });
+
+          const formData = new FormData();
+          formData.append('file', imageFile);
+          formData.append('token', document.getElementById('token').value);
+          formData.append('chatid', document.getElementById('chatid').value);
+          formData.append('caption', document.getElementById('caption').value);
+
+          // Update UI to show pasted file name
+          dropZoneText.textContent = 'File selected (from paste):';
+          fileNameDisplay.textContent = fileName;
+          
+          submitForm(formData); // Submit the form with the pasted image
+          return;
+        }
+      }
+      // If no image was found in clipboard
+      displayResult("No image found in clipboard. Please copy an image first.", false);
     });
 
     // --- Form Submission (AJAX) ---
     uploadForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        submitForm();
+        submitForm(new FormData(uploadForm));
     });
 
-    function submitForm() {
-        if (uploadBtn.disabled) {
-            // Un-collapse credentials if they are required and empty
-            if (!hasTokenValue() && !envToken) toggleCredentials(false);
-            if (!hasChatValue() && !envChat) toggleCredentials(false);
-            alert('Please provide Bot Token, Chat ID, and select a file.');
+    function submitForm(formData) {
+        if (!checkReady() && !formData.has('file')) { // Check if credentials are ready, or if a file is already in formData (e.g., from paste)
+            displayResult('Missing Bot Token or Chat ID. Please provide them as URL parameters (e.g., ?token=...&chatid=...) or set them on the server.', false);
             return;
         }
 
-        const formData = new FormData(uploadForm);
-        
-        // Show loading state
         uploadBtn.disabled = true;
         uploadBtn.textContent = 'Uploading...';
-        resultDiv.style.display = 'none';
+        
+        // Clear previous timer and hide result
+        clearTimeout(resultTimer);
+        resultDiv.classList.remove('visible');
 
-        fetch("{{ url_for('upload') }}", {
-            method: 'POST',
-            body: formData
-        })
+        fetch("{{ url_for('upload') }}", { method: 'POST', body: formData })
         .then(response => response.json())
-        .then(data => {
-            resultText.textContent = data.message;
-            resultDiv.className = data.ok ? 'success' : 'error';
-            resultDiv.style.display = 'block';
-        })
+        .then(data => displayResult(data.message, data.ok))
         .catch(error => {
             console.error('Error:', error);
-            resultText.textContent = 'An unexpected error occurred. Check the console for details.';
-            resultDiv.className = 'error';
-            resultDiv.style.display = 'block';
+            displayResult('An unexpected error occurred. Check the console.', false);
         })
         .finally(() => {
             uploadBtn.textContent = 'Upload';
-            // Re-enable button based on current form state
-            updateUploadButton();
+            checkReady(); // Re-evaluate button state
         });
+    }
+
+    function displayResult(message, isSuccess) {
+        resultText.textContent = message;
+        resultDiv.className = isSuccess ? 'success' : 'error';
+        resultDiv.classList.add('visible');
+
+        // Set a timer to hide the result after 3 seconds
+        resultTimer = setTimeout(() => {
+            resultDiv.classList.remove('visible');
+        }, 3000);
     }
     
     // --- Initial State Setup ---
-    updateEnvMessages();
-    updateUploadButton();
-
+    checkReady();
   </script>
 </body>
 </html>
 """
 
+@app.route('/icon.png')
+def favicon():
+    """Serves the favicon."""
+    return send_from_directory(os.path.dirname(os.path.abspath(__file__)),
+                               'icon.png', mimetype='image/png')
 
 @app.route("/", methods=["GET"])
 def index():
@@ -347,7 +350,6 @@ def index():
         caption=caption,
     )
 
-
 @app.route("/upload", methods=["POST"])
 def upload():
     """Handles the file upload and returns a JSON response."""
@@ -364,32 +366,52 @@ def upload():
     if not token or not chat_id:
         return jsonify({
             "ok": False,
-            "message": "❌ Missing Bot token or Chat ID. Provide them in the form or set server environment variables."
+            "message": "❌ Missing Bot Token or Chat ID. Provide them via URL params or server environment variables."
         }), 400
 
-    if not file:
+    if not file or not file.filename:
         return jsonify({"ok": False, "message": "❌ No file was provided."}), 400
 
-    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    # Determine the correct API endpoint based on file type
+    mimetype = file.mimetype.lower()
+    if mimetype.startswith('image/'):
+        api_method = 'sendPhoto'
+        file_type_key = 'photo'
+    else:
+        api_method = 'sendDocument'
+        file_type_key = 'document'
+    
+    url = f"https://api.telegram.org/bot{token}/{api_method}"
+    
     try:
         resp = requests.post(
             url,
             data={"chat_id": chat_id, "caption": caption},
-            files={"document": (file.filename, file.stream, file.mimetype)},
-            timeout=60  # Add a timeout for robustness
+            files={file_type_key: (file.filename, file.stream, file.mimetype)},
+            timeout=60
         )
-        resp.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        resp.raise_for_status()
 
         data = resp.json()
         if data.get("ok"):
             msg = data["result"]
+            # Get the file details from the correct key ('photo' or 'document')
+            file_details = msg.get(file_type_key)
+            # For photos, file_id is in the largest photo object
+            if file_type_key == 'photo':
+                if isinstance(file_details, list) and file_details:
+                    # Telegram usually sends multiple sizes, pick the largest
+                    file_details = max(file_details, key=lambda x: x.get('file_size', 0))
+                else:
+                    file_details = {} # Fallback if photo array is empty or not list
+
             message = (
                 f"✅ Upload successful!\n\n"
                 f"  Message ID: {msg['message_id']}\n"
                 f"  Chat: {msg['chat'].get('title', msg['chat']['id'])}\n"
-                f"  File ID: {msg['document']['file_id']}\n"
-                f"  File Name: {msg['document'].get('file_name', file.filename)}\n"
-                f"  File Size: {msg['document'].get('file_size', 0):,} bytes"
+                f"  File ID: {file_details.get('file_id', 'N/A')}\n" # Use .get with default
+                f"  File Name: {file.filename}\n"
+                f"  File Size: {file_details.get('file_size', 0):,} bytes" # Use .get with default
             )
             return jsonify({"ok": True, "message": message})
         else:
@@ -400,10 +422,9 @@ def upload():
 
     except requests.exceptions.RequestException as e:
         return jsonify({"ok": False, "message": f"❌ Network or HTTP Error: {e}"}), 500
-    except json.JSONDecodeError:
-        return jsonify({"ok": False, "message": f"❌ Failed to parse Telegram API response."}), 500
-
+    except (json.JSONDecodeError, KeyError) as e:
+        # Added KeyError as photo_details might not have file_id if not found
+        return jsonify({"ok": False, "message": f"❌ Error parsing API response or missing data: {e}\nResponse: {resp.text}"}), 500
 
 if __name__ == "__main__":
-    # Use debug=True for development, but turn it off for production
     app.run(host="0.0.0.0", port=ENV_PORT, debug=True)
