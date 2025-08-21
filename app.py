@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# server.py
+
 import json
 import os
 
@@ -14,7 +14,7 @@ FORM_HTML = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Telegram File Uploader (Server)</title>
+  <title>Telegram File Uploader</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;
          max-width:700px;margin:40px auto;padding:18px}
@@ -29,7 +29,7 @@ FORM_HTML = """
   </style>
 </head>
 <body>
-  <h1>Telegram File Uploader (Server Version)</h1>
+  <h1>Telegram File Uploader</h1>
   <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
     <label>Bot token</label>
     <input id="token" name="token" type="text" placeholder="123456789:AAH..." value="{{ token|default('') }}" required>
@@ -155,4 +155,4 @@ def upload():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="0.0.0.0", port=os.getenv("PORT"))
