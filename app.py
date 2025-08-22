@@ -19,7 +19,7 @@ SINGLE_PAGE_HTML = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Telegram File Uploader</title>
+  <title>To Leaflet</title>
   <link rel="icon" type="image/png" href="{{ url_for('favicon') }}">
   <style>
     :root {
