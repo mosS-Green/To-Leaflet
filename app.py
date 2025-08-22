@@ -2,8 +2,6 @@
 
 import json
 import os
-from datetime import datetime
-
 import requests
 from flask import Flask, render_template_string, request, jsonify, send_from_directory
 
@@ -21,8 +19,7 @@ SINGLE_PAGE_HTML = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>To Leaflet</title>
-  <!-- Link to the favicon -->
+  <title>Telegram File Uploader</title>
   <link rel="icon" type="image/png" href="{{ url_for('favicon') }}">
   <style>
     :root {
@@ -34,6 +31,7 @@ SINGLE_PAGE_HTML = """
       --border-color: #4a5c53;
       --success-color: #6bb06b;
       --error-color: #d9534f;
+      --info-color: #6c9f8f;
     }
     body {
       font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
@@ -49,10 +47,36 @@ SINGLE_PAGE_HTML = """
       border-radius: 12px;
       border: 1px solid var(--border-color);
     }
+    /* --- Collapsible Header --- */
+    #header-container.collapsed #credentials-content {
+      max-height: 0;
+    }
+    #header-container.collapsed #toggle-arrow {
+      transform: rotate(-90deg);
+    }
+    .header-title {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      position: relative; /* For arrow positioning */
+    }
     h1 {
       font-size: 24px;
       margin-bottom: 20px;
       text-align: center;
+    }
+    #toggle-arrow {
+      transition: transform 0.3s ease;
+      position: absolute;
+      right: 0;
+      top: 5px;
+    }
+    #credentials-content {
+      max-height: 500px;
+      overflow: hidden;
+      transition: max-height 0.4s ease-in-out;
     }
     label {
       display: block;
@@ -60,7 +84,7 @@ SINGLE_PAGE_HTML = """
       font-weight: 600;
       font-size: 14px;
     }
-    textarea {
+    input[type=text], textarea {
       width: 100%;
       padding: 10px;
       margin-top: 6px;
@@ -69,10 +93,11 @@ SINGLE_PAGE_HTML = """
       background-color: var(--bg-darker);
       color: var(--text-light);
       box-sizing: border-box;
-      resize: vertical;
       font-family: inherit;
     }
-    /* --- Drag and Drop Zone --- */
+    textarea { resize: vertical; }
+    .env-warning { font-size: 13px; color: var(--info-color); margin-top: 6px; }
+    /* --- Drag and Drop & Paste Zones --- */
     #drop-zone {
       border: 2px dashed var(--border-color);
       border-radius: 8px;
@@ -91,25 +116,16 @@ SINGLE_PAGE_HTML = """
       font-style: italic;
       color: var(--accent-sage);
     }
-    input[type=file] { display: none; }
-    /* --- Paste Zone --- */
     #paste-zone {
-      border: 2px dashed transparent; /* Start transparent */
       border-top: 1px solid var(--border-color);
       margin-top: 20px;
-      padding: 15px;
+      padding-top: 15px;
       text-align: center;
       color: #aaa;
       font-size: 14px;
       cursor: pointer;
-      transition: border-color 0.3s, background-color 0.3s;
-      border-radius: 8px;
     }
-    #paste-zone:focus {
-      outline: none; /* Remove default outline */
-      border-color: var(--accent-sage);
-      background-color: rgba(91, 142, 125, 0.1);
-    }
+    input[type=file] { display: none; }
     /* --- Buttons and Result Area --- */
     button {
       margin-top: 16px;
@@ -151,12 +167,23 @@ SINGLE_PAGE_HTML = """
 </head>
 <body>
   <div class="container">
-    <h1>Telegram Uploader</h1>
+    <div id="header-container" class="collapsed">
+      <div class="header-title" onclick="toggleCredentials()">
+        <h1>Telegram Uploader</h1>
+        <svg id="toggle-arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div id="credentials-content">
+        <label for="token">Bot token</label>
+        <input id="token" name="token" type="text" placeholder="123456789:AAH..." value="{{ url_token|default('') }}">
+        <div id="envTokenMsg" class="env-warning" style="display:none">Default server value will be used for Bot Token.</div>
+        
+        <label for="chatid">Chat ID</label>
+        <input id="chatid" name="chatid" type="text" placeholder="-1001234567890" value="{{ url_chatid|default('') }}">
+        <div id="envChatMsg" class="env-warning" style="display:none">Default server value will be used for Chat ID.</div>
+      </div>
+    </div>
+
     <form id="uploadForm">
-      <!-- Credentials are now hidden fields, populated by URL params -->
-      <input id="token" name="token" type="hidden" value="{{ url_token|default('') }}">
-      <input id="chatid" name="chatid" type="hidden" value="{{ url_chatid|default('') }}">
-      
       <label for="caption">Caption (optional)</label>
       <textarea id="caption" name="caption" rows="2" placeholder="Write a caption...">{{ caption|default('') }}</textarea>
       
@@ -170,7 +197,7 @@ SINGLE_PAGE_HTML = """
       <button id="uploadBtn" type="submit" disabled>Upload</button>
       
       <div id="paste-zone" tabindex="0">
-        Click here, then press Ctrl+V (or Cmd+V) to paste an image
+        Or click here and paste an image (Ctrl+V)
       </div>
     </form>
     
@@ -180,8 +207,14 @@ SINGLE_PAGE_HTML = """
   </div>
 
   <script>
+    const envToken = {{ env_token|tojson }};
+    const envChat = {{ env_chatid|tojson }};
     const uploadForm = document.getElementById('uploadForm');
+    const tokenInput = document.getElementById('token');
+    const chatInput = document.getElementById('chatid');
     const uploadBtn = document.getElementById('uploadBtn');
+    const envTokenMsg = document.getElementById('envTokenMsg');
+    const envChatMsg = document.getElementById('envChatMsg');
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const dropZoneText = document.getElementById('drop-zone-text');
@@ -192,61 +225,62 @@ SINGLE_PAGE_HTML = """
     let resultTimer = null;
 
     // --- State and Validation ---
+    function hasTokenValue() { return tokenInput.value && tokenInput.value.trim().length > 0; }
+    function hasChatValue() { return chatInput.value && chatInput.value.trim().length > 0; }
+
+    function updateEnvMessages() {
+      envTokenMsg.style.display = (!hasTokenValue() && envToken) ? 'block' : 'none';
+      envChatMsg.style.display = (!hasChatValue() && envChat) ? 'block' : 'none';
+    }
+
     function checkReady() {
-      const token = document.getElementById('token').value.trim();
-      const chatid = document.getElementById('chatid').value.trim();
-      const envToken = {{ env_token|tojson }};
-      const envChat = {{ env_chatid|tojson }};
-      
-      const okToken = token || envToken;
-      const okChat = chatid || envChat;
+      const okToken = hasTokenValue() || envToken;
+      const okChat = hasChatValue() || envChat;
       const okFile = fileInput.files.length > 0;
-      
       uploadBtn.disabled = !(okToken && okChat && okFile);
-      return okToken && okChat;
     }
     
+    tokenInput.addEventListener('input', () => { updateEnvMessages(); checkReady(); });
+    chatInput.addEventListener('input', () => { updateEnvMessages(); checkReady(); });
     fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) {
-            dropZoneText.textContent = 'File selected:';
-            fileNameDisplay.textContent = fileInput.files[0].name;
-        } else {
-            dropZoneText.textContent = 'Drag & drop a file here, or click to select';
-            fileNameDisplay.textContent = '';
-        }
-        checkReady();
+        handleFileSelect(fileInput.files);
     });
 
-    // --- Drag and Drop Logic ---
+    function handleFileSelect(files) {
+        if (files && files.length > 0) {
+            dropZoneText.textContent = 'File selected:';
+            fileNameDisplay.textContent = files[0].name;
+        } else {
+            resetFileSelection();
+        }
+        checkReady();
+    }
+
+    function resetFileSelection() {
+        fileInput.value = ''; // Important to clear the file input
+        dropZoneText.textContent = 'Drag & drop a file here, or click to select';
+        fileNameDisplay.textContent = '';
+        checkReady(); // Re-evaluate button state
+    }
+
+    // --- Collapsible Credentials ---
+    function toggleCredentials() {
+      document.getElementById('header-container').classList.toggle('collapsed');
+    }
+
+    // --- Drag and Drop & Paste Logic ---
     dropZone.addEventListener('click', () => fileInput.click());
-    dropZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      dropZone.classList.add('drag-over');
-    });
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
     dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
       if (e.dataTransfer.files.length) {
         fileInput.files = e.dataTransfer.files;
-        fileInput.dispatchEvent(new Event('change'));
-        submitForm(new FormData(uploadForm)); // Submit on drop
+        handleFileSelect(fileInput.files);
+        submitForm();
       }
     });
-
-    // --- Paste Zone UX and Logic ---
-    pasteZone.addEventListener('click', () => {
-        pasteZone.focus(); // Set focus to the paste zone
-    });
-    
-    pasteZone.addEventListener('focus', () => {
-        // Optional: you could show a brief message like "Now press Ctrl+V"
-    });
-    
-    pasteZone.addEventListener('blur', () => {
-        // Optional: clear any focus-related messages
-    });
-
     pasteZone.addEventListener('paste', (e) => {
       e.preventDefault();
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -256,41 +290,43 @@ SINGLE_PAGE_HTML = """
           const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
           const fileName = `pasted-image-${timestamp}.png`;
           const imageFile = new File([blob], fileName, { type: blob.type });
-
-          const formData = new FormData();
-          formData.append('file', imageFile);
-          formData.append('token', document.getElementById('token').value);
-          formData.append('chatid', document.getElementById('chatid').value);
-          formData.append('caption', document.getElementById('caption').value);
-
-          // Update UI to show pasted file name
-          dropZoneText.textContent = 'File selected (from paste):';
-          fileNameDisplay.textContent = fileName;
           
-          submitForm(formData); // Submit the form with the pasted image
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(imageFile);
+          fileInput.files = dataTransfer.files;
+
+          handleFileSelect(fileInput.files);
+          submitForm();
           return;
         }
       }
-      // If no image was found in clipboard
-      displayResult("No image found in clipboard. Please copy an image first.", false);
     });
 
     // --- Form Submission (AJAX) ---
     uploadForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        submitForm(new FormData(uploadForm));
+        submitForm();
     });
 
-    function submitForm(formData) {
-        if (!checkReady() && !formData.has('file')) { // Check if credentials are ready, or if a file is already in formData (e.g., from paste)
-            displayResult('Missing Bot Token or Chat ID. Please provide them as URL parameters (e.g., ?token=...&chatid=...) or set them on the server.', false);
+    function submitForm() {
+        if (uploadBtn.disabled) {
+            if (!hasTokenValue() && !envToken || !hasChatValue() && !envChat) {
+                document.getElementById('header-container').classList.remove('collapsed');
+                alert('Missing Bot Token or Chat ID. Please provide them.');
+            } else {
+                alert('Please select a file to upload.');
+            }
             return;
         }
 
+        const formData = new FormData();
+        formData.append('token', tokenInput.value);
+        formData.append('chatid', chatInput.value);
+        formData.append('caption', document.getElementById('caption').value);
+        formData.append('file', fileInput.files[0]);
+
         uploadBtn.disabled = true;
         uploadBtn.textContent = 'Uploading...';
-        
-        // Clear previous timer and hide result
         clearTimeout(resultTimer);
         resultDiv.classList.remove('visible');
 
@@ -303,7 +339,7 @@ SINGLE_PAGE_HTML = """
         })
         .finally(() => {
             uploadBtn.textContent = 'Upload';
-            checkReady(); // Re-evaluate button state
+            checkReady();
         });
     }
 
@@ -312,13 +348,15 @@ SINGLE_PAGE_HTML = """
         resultDiv.className = isSuccess ? 'success' : 'error';
         resultDiv.classList.add('visible');
 
-        // Set a timer to hide the result after 3 seconds
         resultTimer = setTimeout(() => {
             resultDiv.classList.remove('visible');
+            // Reset file selection after feedback disappears
+            resetFileSelection();
         }, 3000);
     }
     
     // --- Initial State Setup ---
+    updateEnvMessages();
     checkReady();
   </script>
 </body>
@@ -372,7 +410,6 @@ def upload():
     if not file or not file.filename:
         return jsonify({"ok": False, "message": "❌ No file was provided."}), 400
 
-    # Determine the correct API endpoint based on file type
     mimetype = file.mimetype.lower()
     if mimetype.startswith('image/'):
         api_method = 'sendPhoto'
@@ -395,23 +432,20 @@ def upload():
         data = resp.json()
         if data.get("ok"):
             msg = data["result"]
-            # Get the file details from the correct key ('photo' or 'document')
             file_details = msg.get(file_type_key)
-            # For photos, file_id is in the largest photo object
             if file_type_key == 'photo':
                 if isinstance(file_details, list) and file_details:
-                    # Telegram usually sends multiple sizes, pick the largest
                     file_details = max(file_details, key=lambda x: x.get('file_size', 0))
                 else:
-                    file_details = {} # Fallback if photo array is empty or not list
+                    file_details = {} 
 
             message = (
                 f"✅ Upload successful!\n\n"
                 f"  Message ID: {msg['message_id']}\n"
                 f"  Chat: {msg['chat'].get('title', msg['chat']['id'])}\n"
-                f"  File ID: {file_details.get('file_id', 'N/A')}\n" # Use .get with default
+                f"  File ID: {file_details.get('file_id', 'N/A')}\n"
                 f"  File Name: {file.filename}\n"
-                f"  File Size: {file_details.get('file_size', 0):,} bytes" # Use .get with default
+                f"  File Size: {file_details.get('file_size', 0):,} bytes"
             )
             return jsonify({"ok": True, "message": message})
         else:
@@ -423,7 +457,6 @@ def upload():
     except requests.exceptions.RequestException as e:
         return jsonify({"ok": False, "message": f"❌ Network or HTTP Error: {e}"}), 500
     except (json.JSONDecodeError, KeyError) as e:
-        # Added KeyError as photo_details might not have file_id if not found
         return jsonify({"ok": False, "message": f"❌ Error parsing API response or missing data: {e}\nResponse: {resp.text}"}), 500
 
 if __name__ == "__main__":
