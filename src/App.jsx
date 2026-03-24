@@ -1,15 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './index.css';
 
-const ChevronDown = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
-const Loader2 = ({ className, style }) => <svg className={className} style={style} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
-const CloudUpload = ({ className, style }) => <svg className={className} style={style} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 16 4-4 4 4"/></svg>;
+const SettingsIcon = ({ className }) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+const Loader2 = ({ className, style }) => <svg className={className} style={style} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
+const RefreshCw = ({ className }) => <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>;
+const Send = ({ className }) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
+const Download = ({ className }) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+
+// File Icons
+const FileText = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+const Image = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
+const FileSvg = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
+
+const getFileDetails = (filename) => {
+  const ext = filename?.split('.').pop().toLowerCase() || '';
+  if (['pdf'].includes(ext)) return { Icon: FileText, colorClass: 'color-pdf' };
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return { Icon: Image, colorClass: 'color-img' };
+  if (['doc', 'docx'].includes(ext)) return { Icon: FileText, colorClass: 'color-doc' };
+  return { Icon: FileSvg, colorClass: 'color-other' };
+};
 
 export default function App() {
   const [botToken, setBotToken] = useState(() => localStorage.getItem('tg_bot_token') || '');
   const [chatId, setChatId] = useState(() => localStorage.getItem('tg_chat_id') || '');
   const [credentialsOpen, setCredentialsOpen] = useState(botToken === '' || chatId === '');
-  const [caption, setCaption] = useState('');
+  const [message, setMessage] = useState('');
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
@@ -27,13 +42,20 @@ export default function App() {
   }, [chatId]);
 
   useEffect(() => {
+    if (botToken && chatId) {
+      fetchRecent();
+    }
+  }, [botToken, chatId]);
+
+  useEffect(() => {
     const handlePaste = (e) => {
       if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
       
-      const item = Array.from(e.clipboardData.items).find(i => i.kind === 'file' && i.type.startsWith('image/'));
+      const item = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
       if (item) {
         const pastedFile = item.getAsFile();
-        const newFile = new File([pastedFile], `pasted-${Date.now()}.png`, { type: pastedFile.type });
+        const ext = pastedFile.type.split('/')[1] || 'png';
+        const newFile = new File([pastedFile], `pasted-${Date.now()}.${ext}`, { type: pastedFile.type });
         setFile(newFile);
       }
     };
@@ -41,38 +63,55 @@ export default function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
-  const handleUpload = async (e) => {
+  const handleSend = async (e) => {
     e?.preventDefault();
-    if (!botToken || !chatId || !file) return;
+    if (!botToken || !chatId || (!file && !message.trim())) return;
 
     setUploading(true);
     setResult(null);
 
-    const isImage = file.type.startsWith('image/');
-    const apiMethod = isImage ? 'sendPhoto' : 'sendDocument';
-    const fileKey = isImage ? 'photo' : 'document';
-    
-    const formData = new FormData();
-    formData.append('chat_id', chatId);
-    if (caption) formData.append('caption', caption);
-    formData.append(fileKey, file);
-
     try {
-      const res = await fetch(`https://api.telegram.org/bot${botToken}/${apiMethod}`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setResult({ ok: true, message: '✅ Upload successful!' });
-        setFile(null);
-        setCaption('');
-        if (fileInputRef.current) fileInputRef.current.value = '';
+      if (file) {
+        const isImage = file.type.startsWith('image/');
+        const apiMethod = isImage ? 'sendPhoto' : 'sendDocument';
+        const fileKey = isImage ? 'photo' : 'document';
+        
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        if (message.trim()) formData.append('caption', message.trim());
+        formData.append(fileKey, file);
+
+        const res = await fetch(`https://api.telegram.org/bot${botToken}/${apiMethod}`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setResult({ ok: true, message: 'Sent!' });
+          setFile(null);
+          setMessage('');
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          fetchRecent();
+        } else {
+          setResult({ ok: false, message: `API Error: ${data.description}` });
+        }
       } else {
-        setResult({ ok: false, message: `❌ API Error: ${data.description}` });
+        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: message.trim() }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setResult({ ok: true, message: 'Message sent!' });
+          setMessage('');
+          fetchRecent();
+        } else {
+          setResult({ ok: false, message: `API Error: ${data.description}` });
+        }
       }
     } catch (err) {
-      setResult({ ok: false, message: `❌ Network Error: ${err.message}` });
+      setResult({ ok: false, message: `Network Error: ${err.message}` });
     } finally {
       setUploading(false);
       setTimeout(() => setResult(null), 3000);
@@ -83,15 +122,13 @@ export default function App() {
     if (!botToken || !chatId) return;
     setFetching(true);
     setResult(null);
-    setRecentFiles([]);
 
-    const thirtyMinsAgo = Math.floor(Date.now() / 1000) - (30 * 60);
+    const timeAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
     
     try {
       const res = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?chat_id=${chatId}&limit=100`);
       const data = await res.json();
       if (!data.ok) {
-        setResult({ ok: false, message: `API Error: ${data.description}` });
         setFetching(false);
         return;
       }
@@ -100,7 +137,8 @@ export default function App() {
       const messages = (data.result || []).map(item => item.message || item.channel_post).filter(Boolean);
 
       for (const msg of messages) {
-        if (String(msg.chat?.id) !== String(chatId) || msg.date < thirtyMinsAgo) continue;
+        if (String(msg.chat?.id) !== String(chatId) || msg.date < timeAgo) continue;
+        
         const media = msg.document || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
         if (media) {
           files.push({
@@ -109,27 +147,46 @@ export default function App() {
             size: media.file_size || 0
           });
         }
+        
+        if (msg.text) {
+          files.push({
+            name: msg.text.length > 30 ? msg.text.substring(0, 30) + '...' : msg.text,
+            isText: true,
+            size: 0,
+            text: msg.text,
+            id: msg.message_id
+          });
+        }
       }
-      setRecentFiles(files.reverse());
+      
+      const uniqueFiles = [];
+      const seen = new Set();
+      for (const f of files.reverse()) {
+        const key = f.isText ? f.id : f.file_id;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueFiles.push(f);
+        }
+      }
+      setRecentFiles(uniqueFiles);
     } catch (err) {
-      setResult({ ok: false, message: `❌ Network Error: ${err.message}` });
+      console.error(err);
     } finally {
       setFetching(false);
     }
   };
 
-  const downloadFile = async (fileId) => {
+  const downloadFile = async (e, fileId) => {
+    e.stopPropagation();
     try {
       const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
       const data = await res.json();
       if (data.ok) {
         const filePath = data.result.file_path;
         window.open(`https://api.telegram.org/file/bot${botToken}/${filePath}`, '_blank');
-      } else {
-        alert('Failed to get file: ' + data.description);
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      console.error(err);
     }
   };
 
@@ -142,19 +199,18 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
-      <div className="header">
-        <div className="header-title">
-          <CloudUpload className="text-accent" style={{ color: 'var(--accent)' }}/>
-          <h2>Telegram Uploader</h2>
+    <div className="app-wrapper">
+      <div className="top-bar">
+        <div className="title-area">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+          To-Leaflet
         </div>
         <button 
           type="button"
           className={`settings-btn ${credentialsOpen ? 'open' : ''}`}
           onClick={() => setCredentialsOpen(!credentialsOpen)}
-          title="Settings"
         >
-          <ChevronDown />
+          <SettingsIcon />
         </button>
       </div>
 
@@ -162,8 +218,8 @@ export default function App() {
         <div className="form-group">
           <label>Bot Token</label>
           <input 
-            type="text" 
-            placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+            type="password" 
+            placeholder="Token"
             value={botToken}
             onChange={(e) => setBotToken(e.target.value)}
           />
@@ -172,105 +228,133 @@ export default function App() {
           <label>Chat ID</label>
           <input 
             type="text" 
-            placeholder="-1001234567890"
+            placeholder="Chat ID"
             value={chatId}
             onChange={(e) => setChatId(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="main-content">
-        <form onSubmit={handleUpload}>
-          <div className="form-group">
-            <label>Caption (Optional)</label>
+      <div className="content-split">
+        <div className="send-zone">
+          <form className="send-area" onSubmit={handleSend}>
             <textarea 
-              rows="2" 
-              placeholder="Write a caption..."
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              className="textarea-message"
+              placeholder="Type a message or caption..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
             />
-          </div>
 
-          <div 
-            className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              if (e.dataTransfer.files?.length) {
-                setFile(e.dataTransfer.files[0]);
-              }
-            }}
-          >
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                 if (e.target.files?.length) {
-                    setFile(e.target.files[0]);
-                 }
+            <div 
+              className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (e.dataTransfer.files?.length) {
+                  setFile(e.dataTransfer.files[0]);
+                }
               }}
-            />
-            {file ? (
-              <>
-                <div style={{ color: 'var(--accent)', fontWeight: '600' }}>{file.name}</div>
-                <div style={{ fontSize: '13px' }}>{formatSize(file.size)}</div>
-              </>
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                   if (e.target.files?.length) {
+                      setFile(e.target.files[0]);
+                   }
+                }}
+              />
+              {file ? (
+                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'}}>
+                  <div style={{ color: 'var(--text-light)', fontFamily: "'Fira Code', monospace", fontSize: '13px' }}>{file.name}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{formatSize(file.size)}</div>
+                  <button type="button" className="btn" style={{width: 'auto', padding: '4px 12px', marginTop: '8px', fontSize: '12px'}} onClick={(e) => { e.stopPropagation(); setFile(null); }}>
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <div style={{fontSize: '13px'}}>Select File</div>
+                </>
+              )}
+            </div>
+
+            <button 
+              type="submit" 
+              className="btn" 
+              disabled={(!file && !message.trim()) || !botToken || !chatId || uploading}
+            >
+              {uploading ? <Loader2 className="spin" /> : <Send />}
+              {uploading ? 'Sending...' : 'Send'}
+            </button>
+          </form>
+
+          {result && (
+            <div className={`result ${result.ok ? 'success' : 'error'}`}>
+              {result.message}
+            </div>
+          )}
+        </div>
+
+        <div className="receive-zone">
+          <div className="receive-header">
+            <h2>Recent Files</h2>
+            <button className="btn-icon" onClick={fetchRecent} disabled={fetching}>
+              <RefreshCw className={fetching ? "spin" : ""} />
+            </button>
+          </div>
+          
+          <div className="file-list">
+            {recentFiles.length > 0 ? (
+              recentFiles.map((f, i) => {
+                if (f.isText) {
+                  return (
+                    <div key={i} className="file-item">
+                      <div className="file-icon color-other">
+                        <FileText />
+                      </div>
+                      <div className="file-info">
+                        <span className="file-name" title={f.text}>{f.name}</span>
+                        <span className="file-size">Message</span>
+                      </div>
+                      <button className="btn-icon" onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(f.text);
+                      }} title="Copy Message">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      </button>
+                    </div>
+                  );
+                }
+
+                const { Icon, colorClass } = getFileDetails(f.name);
+                return (
+                  <div key={i} className="file-item" onClick={(e) => downloadFile(e, f.file_id)}>
+                    <div className={`file-icon ${colorClass}`}>
+                      <Icon />
+                    </div>
+                    <div className="file-info">
+                      <span className="file-name" title={f.name}>{f.name}</span>
+                      <span className="file-size">{formatSize(f.size)}</span>
+                    </div>
+                    <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id)} title="Download">
+                      <Download />
+                    </button>
+                  </div>
+                );
+              })
             ) : (
-              <>
-                <CloudUpload />
-                <div>Drag & drop a file here, or click to select<br/><span style={{fontSize: '12px', opacity: 0.7}}>You can also Paste (Ctrl+V) anywhere</span></div>
-              </>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>
+                No recent files found.
+              </div>
             )}
           </div>
-
-          <button 
-            type="submit" 
-            className="btn" 
-            style={{ marginTop: '20px' }}
-            disabled={!file || !botToken || !chatId || uploading}
-          >
-            {uploading ? <><Loader2 className="spin" /> Uploading...</> : 'Upload to Telegram'}
-          </button>
-        </form>
-
-        {result && (
-          <div className={`result ${result.ok ? 'success' : 'error'}`}>
-            {result.message}
-          </div>
-        )}
-      </div>
-
-      <div className="recent-files-section">
-        <div className="recent-files-header">
-          <h2>Recent Files (30m)</h2>
-          <button 
-            type="button"
-            className="btn btn-secondary"
-            onClick={fetchRecent}
-            disabled={fetching || !botToken || !chatId}
-          >
-            {fetching ? <><Loader2 className="spin" style={{ width: '16px', height: '16px', marginRight: '6px', verticalAlign: 'middle', display: 'inline-block'}} /> Fetching...</> : 'Refresh Files'}
-          </button>
         </div>
-        
-        {recentFiles.length > 0 ? (
-          <div className="file-list">
-            {recentFiles.map((f, i) => (
-              <div key={i} className="file-item" onClick={() => downloadFile(f.file_id)}>
-                <span className="file-item-name" title={f.name}>{f.name}</span>
-                <span className="file-item-size">{formatSize(f.size)}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>
-            No recent files found in this chat.
-          </div>
-        )}
       </div>
     </div>
   );
