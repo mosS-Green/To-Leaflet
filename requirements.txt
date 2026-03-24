@@ -1,7 +1,0 @@
-flask
-gunicorn
-requests
-pyrogram
-aiohttp
-aiohttp_jinja2
-TgCrypto
