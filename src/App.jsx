@@ -81,7 +81,7 @@ export default function App() {
         if (message.trim()) formData.append('caption', message.trim());
         formData.append(fileKey, file);
 
-        const res = await fetch(`https://api.telegram.org/bot${botToken}/${apiMethod}`, {
+        const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/${apiMethod}`, {
           method: 'POST',
           body: formData,
         });
@@ -96,7 +96,7 @@ export default function App() {
           setResult({ ok: false, message: `API Error: ${data.description}` });
         }
       } else {
-        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: chatId, text: message.trim() }),
@@ -126,7 +126,7 @@ export default function App() {
     const timeAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
     
     try {
-      const res = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?chat_id=${chatId}&limit=100`);
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?chat_id=${chatId}&limit=100`);
       const data = await res.json();
       if (!data.ok) {
         setFetching(false);
@@ -179,11 +179,11 @@ export default function App() {
   const downloadFile = async (e, fileId) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getFile?file_id=${fileId}`);
       const data = await res.json();
       if (data.ok) {
         const filePath = data.result.file_path;
-        window.open(`https://api.telegram.org/file/bot${botToken}/${filePath}`, '_blank');
+        window.open(`https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`, '_blank');
       }
     } catch (err) {
       console.error(err);
