@@ -126,9 +126,11 @@ export default function App() {
     const timeAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
     
     try {
-      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?chat_id=${chatId}&limit=100`);
+      // Use offset=-1 to get only the most recent batch without consuming the queue permanently
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?offset=-1&limit=100&allowed_updates=["message","channel_post"]`);
       const data = await res.json();
       if (!data.ok) {
+        console.error('getUpdates error:', data);
         setFetching(false);
         return;
       }
@@ -170,7 +172,9 @@ export default function App() {
       }
       setRecentFiles(uniqueFiles);
     } catch (err) {
-      console.error(err);
+      console.error('fetchRecent error:', err);
+      setResult({ ok: false, message: `Fetch error: ${err.message}` });
+      setTimeout(() => setResult(null), 4000);
     } finally {
       setFetching(false);
     }
@@ -183,10 +187,13 @@ export default function App() {
       const data = await res.json();
       if (data.ok) {
         const filePath = data.result.file_path;
+        // Route file download through CF worker, not api.telegram.org directly
         window.open(`https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`, '_blank');
+      } else {
+        console.error('getFile error:', data);
       }
     } catch (err) {
-      console.error(err);
+      console.error('downloadFile error:', err);
     }
   };
 
