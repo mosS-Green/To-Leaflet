@@ -123,11 +123,9 @@ export default function App() {
     setFetching(true);
     setResult(null);
 
-    const timeAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
-    
     try {
-      // Use offset=-1 to get only the most recent batch without consuming the queue permanently
-      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?offset=-1&limit=100&allowed_updates=["message","channel_post"]`);
+      // Fetch up to 100 recent unconfirmed updates
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?limit=100&allowed_updates=["message","channel_post"]`);
       const data = await res.json();
       if (!data.ok) {
         console.error('getUpdates error:', data);
@@ -139,7 +137,7 @@ export default function App() {
       const messages = (data.result || []).map(item => item.message || item.channel_post).filter(Boolean);
 
       for (const msg of messages) {
-        if (String(msg.chat?.id) !== String(chatId) || msg.date < timeAgo) continue;
+        if (String(msg.chat?.id) !== String(chatId)) continue;
         
         const media = msg.document || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
         if (media) {
@@ -168,6 +166,7 @@ export default function App() {
         if (!seen.has(key)) {
           seen.add(key);
           uniqueFiles.push(f);
+          if (uniqueFiles.length >= 5) break;
         }
       }
       setRecentFiles(uniqueFiles);
@@ -180,15 +179,27 @@ export default function App() {
     }
   };
 
-  const downloadFile = async (e, fileId) => {
+  const downloadFile = async (e, fileId, fileName) => {
     e.stopPropagation();
     try {
       const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getFile?file_id=${fileId}`);
       const data = await res.json();
       if (data.ok) {
         const filePath = data.result.file_path;
-        // Route file download through CF worker, not api.telegram.org directly
-        window.open(`https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`, '_blank');
+        const fileUrl = `https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`;
+        
+        // Fetch the file as a blob to trigger download without opening a new tab
+        const fileRes = await fetch(fileUrl);
+        const blob = await fileRes.blob();
+        
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName || 'download';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
       } else {
         console.error('getFile error:', data);
       }
@@ -341,7 +352,7 @@ export default function App() {
 
                 const { Icon, colorClass } = getFileDetails(f.name);
                 return (
-                  <div key={i} className="file-item" onClick={(e) => downloadFile(e, f.file_id)}>
+                  <div key={i} className="file-item" onClick={(e) => downloadFile(e, f.file_id, f.name)}>
                     <div className={`file-icon ${colorClass}`}>
                       <Icon />
                     </div>
@@ -349,7 +360,7 @@ export default function App() {
                       <span className="file-name" title={f.name}>{f.name}</span>
                       <span className="file-size">{formatSize(f.size)}</span>
                     </div>
-                    <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id)} title="Download">
+                    <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id, f.name)} title="Download">
                       <Download />
                     </button>
                   </div>
