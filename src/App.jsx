@@ -12,6 +12,32 @@ const FileText = ({ className }) => <svg className={className} width="24" height
 const Image = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
 const FileSvg = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
 
+const MIME_TO_EXT = {
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/pdf': 'pdf',
+  'application/zip': 'zip',
+  'application/x-7z-compressed': '7z',
+  'application/x-rar-compressed': 'rar',
+  'application/gzip': 'gz',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'text/html': 'html',
+  'application/json': 'json',
+  'application/xml': 'xml',
+};
+
+function getExtFromMime(mime) {
+  if (MIME_TO_EXT[mime]) return MIME_TO_EXT[mime];
+  const sub = (mime.split('/')[1] || 'bin');
+  // If subtype contains dots or plus, it's a complex MIME — fall back to 'bin'
+  return (sub.includes('.') || sub.includes('+')) ? 'bin' : sub;
+}
+
 const getFileDetails = (filename) => {
   const ext = filename?.split('.').pop().toLowerCase() || '';
   if (['pdf'].includes(ext)) return { Icon: FileText, colorClass: 'color-pdf' };
@@ -54,7 +80,7 @@ export default function App() {
       const item = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
       if (item) {
         const pastedFile = item.getAsFile();
-        const ext = pastedFile.type.split('/')[1] || 'png';
+        const ext = getExtFromMime(pastedFile.type || 'application/octet-stream');
         const newFile = new File([pastedFile], `pasted-${Date.now()}.${ext}`, { type: pastedFile.type });
         setFile(newFile);
       }
@@ -122,12 +148,9 @@ export default function App() {
     if (!botToken || !chatId) return;
     setFetching(true);
     setResult(null);
-
-    const timeAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
     
     try {
-      // Use offset=-5 to get the last 5 updates instead of just the very last one
-      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?offset=-5&limit=100&allowed_updates=["message","channel_post"]`);
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?limit=100`);
       const data = await res.json();
       if (!data.ok) {
         console.error('getUpdates error:', data);
@@ -139,7 +162,7 @@ export default function App() {
       const messages = (data.result || []).map(item => item.message || item.channel_post).filter(Boolean);
 
       for (const msg of messages) {
-        if (String(msg.chat?.id) !== String(chatId) || msg.date < timeAgo) continue;
+        if (String(msg.chat?.id) !== String(chatId)) continue;
         
         const media = msg.document || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
         if (media) {
@@ -168,6 +191,7 @@ export default function App() {
         if (!seen.has(key)) {
           seen.add(key);
           uniqueFiles.push(f);
+          if (uniqueFiles.length >= 10) break;
         }
       }
       setRecentFiles(uniqueFiles);
@@ -284,6 +308,12 @@ export default function App() {
               placeholder="Type a message or caption..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend(e);
+                }
+              }}
             />
 
             <div 
