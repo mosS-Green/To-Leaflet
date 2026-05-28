@@ -123,9 +123,11 @@ export default function App() {
     setFetching(true);
     setResult(null);
 
+    const timeAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+    
     try {
-      // Fetch up to 100 recent unconfirmed updates
-      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?limit=100&allowed_updates=["message","channel_post"]`);
+      // Use offset=-5 to get the last 5 updates instead of just the very last one
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?offset=-5&limit=100&allowed_updates=["message","channel_post"]`);
       const data = await res.json();
       if (!data.ok) {
         console.error('getUpdates error:', data);
@@ -137,7 +139,7 @@ export default function App() {
       const messages = (data.result || []).map(item => item.message || item.channel_post).filter(Boolean);
 
       for (const msg of messages) {
-        if (String(msg.chat?.id) !== String(chatId)) continue;
+        if (String(msg.chat?.id) !== String(chatId) || msg.date < timeAgo) continue;
         
         const media = msg.document || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
         if (media) {
@@ -166,7 +168,6 @@ export default function App() {
         if (!seen.has(key)) {
           seen.add(key);
           uniqueFiles.push(f);
-          if (uniqueFiles.length >= 5) break;
         }
       }
       setRecentFiles(uniqueFiles);
@@ -187,19 +188,41 @@ export default function App() {
       if (data.ok) {
         const filePath = data.result.file_path;
         const fileUrl = `https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`;
+        const finalFileName = fileName || filePath.split('/').pop() || 'download';
         
-        // Fetch the file as a blob to trigger download without opening a new tab
-        const fileRes = await fetch(fileUrl);
-        const blob = await fileRes.blob();
-        
-        const blobUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = fileName || 'download';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(blobUrl);
+        try {
+          // Attempt to fetch as blob to avoid opening a new tab and force download with filename
+          const fileRes = await fetch(fileUrl);
+          if (!fileRes.ok) throw new Error('File fetch failed');
+          const blob = await fileRes.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = blobUrl;
+          a.download = finalFileName;
+          document.body.appendChild(a);
+          a.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+          }, 100);
+        } catch (fetchErr) {
+          console.warn('Blob download failed, falling back to anchor click:', fetchErr);
+          // Fallback if CORS or other error prevents blob fetching
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = fileUrl;
+          a.download = finalFileName;
+          a.target = '_top'; // Try to keep it in the same window/tab if possible
+          document.body.appendChild(a);
+          a.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(a);
+          }, 100);
+        }
       } else {
         console.error('getFile error:', data);
       }
