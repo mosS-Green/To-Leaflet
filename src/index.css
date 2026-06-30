@@ -323,3 +323,81 @@ input:focus, textarea:focus {
 .result.error { color: var(--error); border-color: rgba(239, 68, 68, 0.5); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+
+.options-zone {
+  display: flex;
+  align-items: center;
+  margin-top: -8px;
+  margin-bottom: 8px;
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding-left: 24px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-muted);
+  transition: color 0.3s;
+}
+
+.checkbox-container:hover {
+  color: var(--text-light);
+}
+
+.checkbox-container input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkbox-custom {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  height: 14px;
+  width: 14px;
+  background-color: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.checkbox-container:hover input ~ .checkbox-custom {
+  border-color: var(--accent-2);
+}
+
+.checkbox-container input:checked ~ .checkbox-custom {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.checkbox-custom::after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+.checkbox-container input:checked ~ .checkbox-custom::after {
+  display: block;
+}
+
+.checkbox-container .checkbox-custom::after {
+  left: 4px;
+  top: 1px;
+  width: 3px;
+  height: 6px;
+  border: solid var(--bg-darker);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+

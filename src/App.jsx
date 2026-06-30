@@ -57,7 +57,11 @@ export default function App() {
   const [fetching, setFetching] = useState(false);
   const [recentFiles, setRecentFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
+  const [pinAfterSend, setPinAfterSend] = useState(() => localStorage.getItem('tg_pin_after_send') === 'true');
+  
   const fileInputRef = useRef(null);
+  const captionRef = useRef(null);
+  const handleSendRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem('tg_bot_token', botToken);
@@ -68,6 +72,10 @@ export default function App() {
   }, [chatId]);
 
   useEffect(() => {
+    localStorage.setItem('tg_pin_after_send', pinAfterSend);
+  }, [pinAfterSend]);
+
+  useEffect(() => {
     if (botToken && chatId) {
       fetchRecent();
     }
@@ -75,18 +83,35 @@ export default function App() {
 
   useEffect(() => {
     const handlePaste = (e) => {
-      if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
-      
       const item = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
       if (item) {
+        e.preventDefault();
         const pastedFile = item.getAsFile();
-        const ext = getExtFromMime(pastedFile.type || 'application/octet-stream');
-        const newFile = new File([pastedFile], `pasted-${Date.now()}.${ext}`, { type: pastedFile.type });
-        setFile(newFile);
+        if (pastedFile) {
+          const ext = getExtFromMime(pastedFile.type || 'application/octet-stream');
+          // If the file has a generic name or no name, generate one, otherwise retain its name
+          const hasGenericName = !pastedFile.name || pastedFile.name === 'blob';
+          const fileName = hasGenericName ? `pasted-${Date.now()}.${ext}` : pastedFile.name;
+          const newFile = new File([pastedFile], fileName, { type: pastedFile.type });
+          
+          setFile(newFile);
+          captionRef.current?.focus();
+        }
       }
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendRef.current?.();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
   const handleSend = async (e) => {
@@ -97,6 +122,7 @@ export default function App() {
     setResult(null);
 
     try {
+      let data;
       if (file) {
         const isImage = file.type.startsWith('image/');
         const apiMethod = isImage ? 'sendPhoto' : 'sendDocument';
@@ -111,30 +137,53 @@ export default function App() {
           method: 'POST',
           body: formData,
         });
-        const data = await res.json();
-        if (data.ok) {
-          setResult({ ok: true, message: 'Sent!' });
-          setFile(null);
-          setMessage('');
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          fetchRecent();
-        } else {
-          setResult({ ok: false, message: `API Error: ${data.description}` });
-        }
+        data = await res.json();
       } else {
         const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: chatId, text: message.trim() }),
         });
-        const data = await res.json();
-        if (data.ok) {
-          setResult({ ok: true, message: 'Message sent!' });
-          setMessage('');
-          fetchRecent();
-        } else {
-          setResult({ ok: false, message: `API Error: ${data.description}` });
+        data = await res.json();
+      }
+
+      if (data.ok) {
+        let pinSuccess = true;
+        if (pinAfterSend && data.result?.message_id) {
+          try {
+            const pinRes = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/pinChatMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId,
+                message_id: data.result.message_id,
+                disable_notification: false,
+              }),
+            });
+            const pinData = await pinRes.json();
+            if (!pinData.ok) {
+              pinSuccess = false;
+              console.error('Failed to pin message:', pinData.description);
+            }
+          } catch (pinErr) {
+            pinSuccess = false;
+            console.error('Error pinning message:', pinErr);
+          }
         }
+
+        setResult({
+          ok: true,
+          message: pinAfterSend
+            ? (pinSuccess ? 'Sent and pinned!' : 'Sent but failed to pin.')
+            : 'Sent!'
+        });
+
+        setFile(null);
+        setMessage('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        fetchRecent();
+      } else {
+        setResult({ ok: false, message: `API Error: ${data.description}` });
       }
     } catch (err) {
       setResult({ ok: false, message: `Network Error: ${err.message}` });
@@ -143,6 +192,10 @@ export default function App() {
       setTimeout(() => setResult(null), 3000);
     }
   };
+
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
 
   const fetchRecent = async () => {
     if (!botToken || !chatId) return;
@@ -304,16 +357,11 @@ export default function App() {
         <div className="send-zone">
           <form className="send-area" onSubmit={handleSend}>
             <textarea 
+              ref={captionRef}
               className="textarea-message"
               placeholder="Type a message or caption..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend(e);
-                }
-              }}
             />
 
             <div 
@@ -353,6 +401,18 @@ export default function App() {
                   <div style={{fontSize: '13px'}}>Select File</div>
                 </>
               )}
+            </div>
+
+            <div className="options-zone">
+              <label className="checkbox-container">
+                <input 
+                  type="checkbox" 
+                  checked={pinAfterSend} 
+                  onChange={(e) => setPinAfterSend(e.target.checked)} 
+                />
+                <span className="checkbox-custom"></span>
+                <span className="checkbox-label">Pin after sending</span>
+              </label>
             </div>
 
             <button 
