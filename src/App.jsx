@@ -192,6 +192,7 @@ export default function App() {
 
         setFile(null);
         setMessage('');
+        setPinAfterSend(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
         fetchRecent();
       } else {
