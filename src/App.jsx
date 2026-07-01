@@ -47,12 +47,147 @@ const getFileDetails = (filename) => {
   return { Icon: FileSvg, colorClass: 'color-other' };
 };
 
+const isImageFile = (filename) => {
+  const ext = filename?.split('.').pop().toLowerCase() || '';
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext);
+};
+
+const copyImageToClipboard = async (imageUrl) => {
+  const response = await fetch(imageUrl);
+  const blob = await response.blob();
+  
+  if (blob.type === 'image/png') {
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'image/png': blob })
+    ]);
+    return;
+  }
+  
+  const img = new window.Image();
+  img.crossOrigin = 'anonymous';
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = URL.createObjectURL(blob);
+  });
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  
+  const pngBlob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/png');
+  });
+  
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': pngBlob })
+  ]);
+};
+
+const ImageThumbnail = ({ fileId, botToken, fallbackIcon: FallbackIcon }) => {
+  const [src, setSrc] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchPath = async () => {
+      try {
+        const cacheKey = `tg_file_path_${fileId}`;
+        let filePath = sessionStorage.getItem(cacheKey);
+        if (!filePath) {
+          const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getFile?file_id=${fileId}`);
+          const data = await res.json();
+          if (data.ok) {
+            filePath = data.result.file_path;
+            sessionStorage.setItem(cacheKey, filePath);
+          }
+        }
+        if (filePath && active) {
+          setSrc(`https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`);
+        }
+      } catch (err) {
+        console.error('Failed to load image preview:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchPath();
+    return () => { active = false; };
+  }, [fileId, botToken]);
+
+  if (loading) {
+    return <div className="spin-mini" style={{ width: '16px', height: '16px', border: '2px solid var(--text-muted)', borderTopColor: 'transparent', borderRadius: '50%' }}></div>;
+  }
+
+  if (src) {
+    return <img src={src} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />;
+  }
+
+  return <FallbackIcon />;
+};
+
+const CopyImageButton = ({ fileId, botToken, showToast }) => {
+  const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+
+  const handleCopy = async (e) => {
+    e.stopPropagation();
+    if (copying) return;
+    setCopying(true);
+    try {
+      const cacheKey = `tg_file_path_${fileId}`;
+      let filePath = sessionStorage.getItem(cacheKey);
+      if (!filePath) {
+        const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getFile?file_id=${fileId}`);
+        const data = await res.json();
+        if (data.ok) {
+          filePath = data.result.file_path;
+          sessionStorage.setItem(cacheKey, filePath);
+        }
+      }
+      if (filePath) {
+        const fileUrl = `https://moss.leafyakeru.workers.dev/file/bot${botToken}/${filePath}`;
+        await copyImageToClipboard(fileUrl);
+        setCopied(true);
+        showToast('Image copied to clipboard!', 'success');
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        showToast('Failed to retrieve image URL.', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to copy image:', err);
+      showToast('Failed to copy image to clipboard.', 'error');
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  return (
+    <button 
+      className="btn-icon" 
+      onClick={handleCopy} 
+      title={copied ? "Copied!" : "Copy Image"}
+      disabled={copying}
+    >
+      {copied ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="green" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      ) : copying ? (
+        <div className="spin-mini" style={{ width: '14px', height: '14px', border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%' }}></div>
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      )}
+    </button>
+  );
+};
+
 export default function App() {
   const [botToken, setBotToken] = useState(() => localStorage.getItem('tg_bot_token') || '');
   const [chatId, setChatId] = useState(() => localStorage.getItem('tg_chat_id') || '');
   const [credentialsOpen, setCredentialsOpen] = useState(botToken === '' || chatId === '');
   const [message, setMessage] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
   const [fetching, setFetching] = useState(false);
@@ -66,6 +201,40 @@ export default function App() {
       return [];
     }
   });
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (msg, type = 'success') => {
+    const id = Date.now() + Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message: msg, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
+
+  const addFiles = (newFiles) => {
+    const validFiles = [];
+    const rejectedFiles = [];
+    
+    for (const f of newFiles) {
+      if (f.size > 25 * 1024 * 1024) {
+        rejectedFiles.push(f.name);
+      } else {
+        validFiles.push(f);
+      }
+    }
+    
+    if (rejectedFiles.length > 0) {
+      showToast(`File size exceeds 25 MB limit: ${rejectedFiles.join(', ')}`, 'error');
+    }
+    
+    if (validFiles.length > 0) {
+      setFiles(prev => [...prev, ...validFiles]);
+    }
+  };
+
+  const removeFile = (index) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
   
   const fileInputRef = useRef(null);
   const captionRef = useRef(null);
@@ -95,20 +264,22 @@ export default function App() {
 
   useEffect(() => {
     const handlePaste = (e) => {
-      const item = Array.from(e.clipboardData.items).find(i => i.kind === 'file');
-      if (item) {
+      const items = Array.from(e.clipboardData.items).filter(i => i.kind === 'file');
+      if (items.length > 0) {
         e.preventDefault();
-        const pastedFile = item.getAsFile();
-        if (pastedFile) {
-          const ext = getExtFromMime(pastedFile.type || 'application/octet-stream');
-          // If the file has a generic name or no name, generate one, otherwise retain its name
-          const hasGenericName = !pastedFile.name || pastedFile.name === 'blob';
-          const fileName = hasGenericName ? `pasted-${Date.now()}.${ext}` : pastedFile.name;
-          const newFile = new File([pastedFile], fileName, { type: pastedFile.type });
-          
-          setFile(newFile);
-          captionRef.current?.focus();
+        const newFiles = [];
+        for (const item of items) {
+          const pastedFile = item.getAsFile();
+          if (pastedFile) {
+            const ext = getExtFromMime(pastedFile.type || 'application/octet-stream');
+            const hasGenericName = !pastedFile.name || pastedFile.name === 'blob';
+            const fileName = hasGenericName ? `pasted-${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}` : pastedFile.name;
+            const newFile = new File([pastedFile], fileName, { type: pastedFile.type });
+            newFiles.push(newFile);
+          }
         }
+        addFiles(newFiles);
+        captionRef.current?.focus();
       }
     };
     window.addEventListener('paste', handlePaste);
@@ -128,81 +299,108 @@ export default function App() {
 
   const handleSend = async (e) => {
     e?.preventDefault();
-    if (!botToken || !chatId || (!file && !message.trim())) return;
+    if (!botToken || !chatId || (files.length === 0 && !message.trim())) return;
 
     setUploading(true);
     setResult(null);
 
-    try {
-      let data;
-      if (file) {
-        const isImage = file.type.startsWith('image/');
-        const apiMethod = isImage ? 'sendPhoto' : 'sendDocument';
-        const fileKey = isImage ? 'photo' : 'document';
-        
-        const formData = new FormData();
-        formData.append('chat_id', chatId);
-        if (message.trim()) formData.append('caption', message.trim());
-        formData.append(fileKey, file);
-
-        const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/${apiMethod}`, {
+    const pinMessage = async (messageId) => {
+      try {
+        const pinRes = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/pinChatMessage`, {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            message_id: messageId,
+            disable_notification: false,
+          }),
         });
-        data = await res.json();
-      } else {
+        const pinData = await pinRes.json();
+        if (!pinData.ok) {
+          console.error('Failed to pin message:', pinData.description);
+        }
+      } catch (pinErr) {
+        console.error('Error pinning message:', pinErr);
+      }
+    };
+
+    try {
+      let successCount = 0;
+      let hasError = false;
+
+      if (files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          const currentFile = files[i];
+          setResult({ ok: true, message: `Sending file ${i + 1} of ${files.length} (${currentFile.name})...` });
+
+          if (currentFile.size > 25 * 1024 * 1024) {
+            showToast(`Skipped "${currentFile.name}": exceeds 25 MB limit.`, 'error');
+            continue;
+          }
+
+          const isImage = currentFile.type.startsWith('image/');
+          const apiMethod = isImage ? 'sendPhoto' : 'sendDocument';
+          const fileKey = isImage ? 'photo' : 'document';
+          
+          const formData = new FormData();
+          formData.append('chat_id', chatId);
+          if (i === 0 && message.trim()) {
+            formData.append('caption', message.trim());
+          }
+          formData.append(fileKey, currentFile);
+
+          const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/${apiMethod}`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.ok) {
+            successCount++;
+            if (pinAfterSend && data.result?.message_id) {
+              await pinMessage(data.result.message_id);
+            }
+          } else {
+            hasError = true;
+            setResult({ ok: false, message: `Failed to send "${currentFile.name}": ${data.description}` });
+            showToast(`Failed to send "${currentFile.name}".`, 'error');
+            break;
+          }
+        }
+      } else if (message.trim()) {
+        setResult({ ok: true, message: 'Sending message...' });
         const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: chatId, text: message.trim() }),
         });
-        data = await res.json();
+        const data = await res.json();
+        if (data.ok) {
+          successCount++;
+          if (pinAfterSend && data.result?.message_id) {
+            await pinMessage(data.result.message_id);
+          }
+        } else {
+          hasError = true;
+          setResult({ ok: false, message: `Failed to send message: ${data.description}` });
+          showToast('Failed to send message.', 'error');
+        }
       }
 
-      if (data.ok) {
-        let pinSuccess = true;
-        if (pinAfterSend && data.result?.message_id) {
-          try {
-            const pinRes = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/pinChatMessage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: chatId,
-                message_id: data.result.message_id,
-                disable_notification: false,
-              }),
-            });
-            const pinData = await pinRes.json();
-            if (!pinData.ok) {
-              pinSuccess = false;
-              console.error('Failed to pin message:', pinData.description);
-            }
-          } catch (pinErr) {
-            pinSuccess = false;
-            console.error('Error pinning message:', pinErr);
-          }
-        }
-
-        setResult({
-          ok: true,
-          message: pinAfterSend
-            ? (pinSuccess ? 'Sent and pinned!' : 'Sent but failed to pin.')
-            : 'Sent!'
-        });
-
-        setFile(null);
+      if (!hasError) {
+        setResult({ ok: true, message: `Sent ${successCount} item(s) successfully!` });
+        showToast(`Successfully sent ${successCount} item(s)!`, 'success');
+        setFiles([]);
         setMessage('');
         setPinAfterSend(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
         fetchRecent();
-      } else {
-        setResult({ ok: false, message: `API Error: ${data.description}` });
       }
     } catch (err) {
       setResult({ ok: false, message: `Network Error: ${err.message}` });
+      showToast('Network error occurred.', 'error');
     } finally {
       setUploading(false);
-      setTimeout(() => setResult(null), 3000);
+      setTimeout(() => setResult(null), 4000);
     }
   };
 
@@ -408,32 +606,45 @@ export default function App() {
                 e.preventDefault();
                 setDragOver(false);
                 if (e.dataTransfer.files?.length) {
-                  setFile(e.dataTransfer.files[0]);
+                  addFiles(Array.from(e.dataTransfer.files));
                 }
               }}
             >
               <input 
                 type="file" 
                 ref={fileInputRef}
+                multiple
                 style={{ display: 'none' }}
                 onChange={(e) => {
                    if (e.target.files?.length) {
-                      setFile(e.target.files[0]);
+                      addFiles(Array.from(e.target.files));
                    }
                 }}
               />
-              {file ? (
-                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'}}>
-                  <div style={{ color: 'var(--text-light)', fontFamily: "'Fira Code', monospace", fontSize: '13px' }}>{file.name}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{formatSize(file.size)}</div>
-                  <button type="button" className="btn" style={{width: 'auto', padding: '4px 12px', marginTop: '8px', fontSize: '12px'}} onClick={(e) => { e.stopPropagation(); setFile(null); }}>
-                    Remove
+              {files.length > 0 ? (
+                <div style={{display: 'flex', flexDirection: 'column', width: '100%', gap: '8px', padding: '0 12px'}}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', textAlign: 'left' }}>Selected ({files.length}):</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', width: '100%' }} onClick={e => e.stopPropagation()}>
+                    {files.map((f, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: '4px', border: '1px solid var(--border)' }}>
+                        <div style={{ textAlign: 'left', minWidth: 0, flex: 1, marginRight: '12px' }}>
+                          <div style={{ color: 'var(--text-light)', fontFamily: "'Fira Code', monospace", fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.name}>{f.name}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formatSize(f.size)}</div>
+                        </div>
+                        <button type="button" className="btn-icon" style={{ padding: '4px', color: 'var(--error)' }} onClick={() => removeFile(idx)} title="Remove file">
+                          <XIcon />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" className="btn" style={{width: 'auto', padding: '4px 12px', marginTop: '8px', fontSize: '12px', alignSelf: 'center'}} onClick={(e) => { e.stopPropagation(); setFiles([]); }}>
+                    Clear All
                   </button>
                 </div>
               ) : (
                 <>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <div style={{fontSize: '13px'}}>Select File</div>
+                  <div style={{fontSize: '13px'}}>Select File(s)</div>
                 </>
               )}
             </div>
@@ -453,7 +664,7 @@ export default function App() {
             <button 
               type="submit" 
               className="btn" 
-              disabled={(!file && !message.trim()) || !botToken || !chatId || uploading}
+              disabled={(files.length === 0 && !message.trim()) || !botToken || !chatId || uploading}
             >
               {uploading ? <Loader2 className="spin" /> : <Send />}
               {uploading ? 'Sending...' : 'Send'}
@@ -465,6 +676,19 @@ export default function App() {
               {result.message}
             </div>
           )}
+          
+          <div className="toast-container">
+            {toasts.map(t => (
+              <div key={t.id} className={`toast ${t.type}`}>
+                {t.type === 'success' ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--error)" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                )}
+                {t.message}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="receive-zone">
@@ -505,10 +729,15 @@ export default function App() {
                 }
 
                 const { Icon, colorClass } = getFileDetails(f.name);
+                const isImg = isImageFile(f.name);
                 return (
                   <div key={i} className="file-item" onClick={(e) => downloadFile(e, f.file_id, f.name)}>
-                    <div className={`file-icon ${colorClass}`}>
-                      <Icon />
+                    <div className={`file-icon ${colorClass} ${isImg ? 'has-thumbnail' : ''}`}>
+                      {isImg ? (
+                        <ImageThumbnail fileId={f.file_id} botToken={botToken} fallbackIcon={Icon} />
+                      ) : (
+                        <Icon />
+                      )}
                     </div>
                     <div className="file-info">
                       <span className="file-name" title={f.name}>{f.name}</span>
@@ -517,6 +746,9 @@ export default function App() {
                     <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id, f.name)} title="Download">
                       <Download />
                     </button>
+                    {isImg && (
+                      <CopyImageButton fileId={f.file_id} botToken={botToken} showToast={showToast} />
+                    )}
                     <button className="btn-icon" onClick={(e) => {
                       e.stopPropagation();
                       handleDismiss(f.file_id);
