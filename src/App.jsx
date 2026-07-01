@@ -6,6 +6,7 @@ const Loader2 = ({ className, style }) => <svg className={className} style={styl
 const RefreshCw = ({ className }) => <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>;
 const Send = ({ className }) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
 const Download = ({ className }) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+const XIcon = ({ className }) => <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 
 // File Icons
 const FileText = ({ className }) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
@@ -58,6 +59,13 @@ export default function App() {
   const [recentFiles, setRecentFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [pinAfterSend, setPinAfterSend] = useState(() => localStorage.getItem('tg_pin_after_send') === 'true');
+  const [hiddenFileIds, setHiddenFileIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('tg_hidden_files') || '[]');
+    } catch {
+      return [];
+    }
+  });
   
   const fileInputRef = useRef(null);
   const captionRef = useRef(null);
@@ -74,6 +82,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tg_pin_after_send', pinAfterSend);
   }, [pinAfterSend]);
+
+  useEffect(() => {
+    localStorage.setItem('tg_hidden_files', JSON.stringify(hiddenFileIds));
+  }, [hiddenFileIds]);
 
   useEffect(() => {
     if (botToken && chatId) {
@@ -197,13 +209,25 @@ export default function App() {
     handleSendRef.current = handleSend;
   });
 
+  const handleDismiss = (key) => {
+    const stringKey = String(key);
+    setHiddenFileIds(prev => {
+      if (prev.includes(stringKey)) return prev;
+      return [...prev, stringKey];
+    });
+    setRecentFiles(prev => prev.filter(f => {
+      const fKey = String(f.isText ? f.id : f.file_id);
+      return fKey !== stringKey;
+    }));
+  };
+
   const fetchRecent = async () => {
     if (!botToken || !chatId) return;
     setFetching(true);
     setResult(null);
     
     try {
-      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?limit=100`);
+      const res = await fetch(`https://moss.leafyakeru.workers.dev/bot${botToken}/getUpdates?limit=100&offset=-100`);
       const data = await res.json();
       if (!data.ok) {
         console.error('getUpdates error:', data);
@@ -213,26 +237,31 @@ export default function App() {
 
       const files = [];
       const messages = (data.result || []).map(item => item.message || item.channel_post).filter(Boolean);
+      const allFetchedKeys = new Set();
 
       for (const msg of messages) {
         if (String(msg.chat?.id) !== String(chatId)) continue;
         
         const media = msg.document || (msg.photo ? msg.photo[msg.photo.length - 1] : null);
         if (media) {
+          const fileId = String(media.file_id);
+          allFetchedKeys.add(fileId);
           files.push({
             name: media.file_name || `photo_${msg.message_id}.jpg`,
-            file_id: media.file_id,
+            file_id: fileId,
             size: media.file_size || 0
           });
         }
         
         if (msg.text) {
+          const msgId = String(msg.message_id);
+          allFetchedKeys.add(msgId);
           files.push({
             name: msg.text.length > 30 ? msg.text.substring(0, 30) + '...' : msg.text,
             isText: true,
             size: 0,
             text: msg.text,
-            id: msg.message_id
+            id: msgId
           });
         }
       }
@@ -240,14 +269,19 @@ export default function App() {
       const uniqueFiles = [];
       const seen = new Set();
       for (const f of files.reverse()) {
-        const key = f.isText ? f.id : f.file_id;
+        const key = String(f.isText ? f.id : f.file_id);
         if (!seen.has(key)) {
           seen.add(key);
-          uniqueFiles.push(f);
-          if (uniqueFiles.length >= 10) break;
+          if (!hiddenFileIds.includes(key)) {
+            uniqueFiles.push(f);
+          }
         }
       }
-      setRecentFiles(uniqueFiles);
+
+      // Garbage collection: Keep only the hidden keys that are still in this batch of updates.
+      setHiddenFileIds(prev => prev.filter(key => allFetchedKeys.has(String(key))));
+
+      setRecentFiles(uniqueFiles.slice(0, 10));
     } catch (err) {
       console.error('fetchRecent error:', err);
       setResult({ ok: false, message: `Fetch error: ${err.message}` });
@@ -459,6 +493,12 @@ export default function App() {
                       }} title="Copy Message">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                       </button>
+                      <button className="btn-icon" onClick={(e) => {
+                        e.stopPropagation();
+                        handleDismiss(f.id);
+                      }} title="Hide Message">
+                        <XIcon />
+                      </button>
                     </div>
                   );
                 }
@@ -475,6 +515,12 @@ export default function App() {
                     </div>
                     <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id, f.name)} title="Download">
                       <Download />
+                    </button>
+                    <button className="btn-icon" onClick={(e) => {
+                      e.stopPropagation();
+                      handleDismiss(f.file_id);
+                    }} title="Hide File">
+                      <XIcon />
                     </button>
                   </div>
                 );
