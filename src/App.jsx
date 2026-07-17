@@ -122,10 +122,24 @@ const ImageThumbnail = ({ fileId, botToken, fallbackIcon: FallbackIcon }) => {
   }
 
   if (src) {
-    return <img src={src} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />;
+    return <img src={src} alt="preview" />;
   }
 
   return <FallbackIcon />;
+};
+
+const LocalImagePreview = ({ file }) => {
+  const [url, setUrl] = useState('');
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  if (!url) return null;
+
+  return <img src={url} alt={file.name} />;
 };
 
 const CopyImageButton = ({ fileId, botToken, showToast }) => {
@@ -445,8 +459,21 @@ export default function App() {
         if (media) {
           const fileId = String(media.file_id);
           allFetchedKeys.add(fileId);
+          
+          let name = media.file_name || `photo_${msg.message_id}.jpg`;
+          if (msg.caption) {
+            let cleanCaption = msg.caption.trim().replace(/[\r\n]+/g, ' ');
+            const originalExt = name.split('.').pop();
+            const hasExt = cleanCaption.toLowerCase().endsWith('.' + originalExt.toLowerCase());
+            if (hasExt) {
+              name = cleanCaption;
+            } else {
+              name = `${cleanCaption}.${originalExt}`;
+            }
+          }
+
           files.push({
-            name: media.file_name || `photo_${msg.message_id}.jpg`,
+            name: name,
             file_id: fileId,
             size: media.file_size || 0
           });
@@ -622,20 +649,30 @@ export default function App() {
                 }}
               />
               {files.length > 0 ? (
-                <div style={{display: 'flex', flexDirection: 'column', width: '100%', gap: '8px', padding: '0 12px'}}>
+                <div className="selected-files-container">
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', textAlign: 'left' }}>Selected ({files.length}):</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', width: '100%' }} onClick={e => e.stopPropagation()}>
-                    {files.map((f, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: '4px', border: '1px solid var(--border)' }}>
-                        <div style={{ textAlign: 'left', minWidth: 0, flex: 1, marginRight: '12px' }}>
-                          <div style={{ color: 'var(--text-light)', fontFamily: "'Fira Code', monospace", fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.name}>{f.name}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formatSize(f.size)}</div>
+                  <div className="selected-files-list" onClick={e => e.stopPropagation()}>
+                    {files.map((f, idx) => {
+                      const isImg = f.type.startsWith('image/') || isImageFile(f.name);
+                      return (
+                        <div key={idx} className="selected-file-item">
+                          <div className="selected-file-header">
+                            <div className="selected-file-info">
+                              <div className="selected-file-name" title={f.name}>{f.name}</div>
+                              <div className="selected-file-size">{formatSize(f.size)}</div>
+                            </div>
+                            <button type="button" className="btn-icon" style={{ padding: '4px', color: 'var(--error)' }} onClick={() => removeFile(idx)} title="Remove file">
+                              <XIcon />
+                            </button>
+                          </div>
+                          {isImg && (
+                            <div className="selected-file-preview">
+                              <LocalImagePreview file={f} />
+                            </div>
+                          )}
                         </div>
-                        <button type="button" className="btn-icon" style={{ padding: '4px', color: 'var(--error)' }} onClick={() => removeFile(idx)} title="Remove file">
-                          <XIcon />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <button type="button" className="btn" style={{width: 'auto', padding: '4px 12px', marginTop: '8px', fontSize: '12px', alignSelf: 'center'}} onClick={(e) => { e.stopPropagation(); setFiles([]); }}>
                     Clear All
@@ -730,14 +767,36 @@ export default function App() {
 
                 const { Icon, colorClass } = getFileDetails(f.name);
                 const isImg = isImageFile(f.name);
+
+                if (isImg) {
+                  return (
+                    <div key={i} className="file-item file-item-image" onClick={(e) => downloadFile(e, f.file_id, f.name)}>
+                      <div className="file-image-preview">
+                        <ImageThumbnail fileId={f.file_id} botToken={botToken} fallbackIcon={Icon} />
+                      </div>
+                      <div className="file-meta">
+                        <div className="file-info">
+                          <span className="file-name" title={f.name}>{f.name}</span>
+                          <span className="file-size">{formatSize(f.size)}</span>
+                        </div>
+                        <div className="file-actions" onClick={(e) => e.stopPropagation()}>
+                          <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id, f.name)} title="Download">
+                            <Download />
+                          </button>
+                          <CopyImageButton fileId={f.file_id} botToken={botToken} showToast={showToast} />
+                          <button className="btn-icon" onClick={(e) => handleDismiss(f.file_id)} title="Hide File">
+                            <XIcon />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={i} className="file-item" onClick={(e) => downloadFile(e, f.file_id, f.name)}>
-                    <div className={`file-icon ${colorClass} ${isImg ? 'has-thumbnail' : ''}`}>
-                      {isImg ? (
-                        <ImageThumbnail fileId={f.file_id} botToken={botToken} fallbackIcon={Icon} />
-                      ) : (
-                        <Icon />
-                      )}
+                    <div className={`file-icon ${colorClass}`}>
+                      <Icon />
                     </div>
                     <div className="file-info">
                       <span className="file-name" title={f.name}>{f.name}</span>
@@ -746,9 +805,6 @@ export default function App() {
                     <button className="btn-icon" onClick={(e) => downloadFile(e, f.file_id, f.name)} title="Download">
                       <Download />
                     </button>
-                    {isImg && (
-                      <CopyImageButton fileId={f.file_id} botToken={botToken} showToast={showToast} />
-                    )}
                     <button className="btn-icon" onClick={(e) => {
                       e.stopPropagation();
                       handleDismiss(f.file_id);
